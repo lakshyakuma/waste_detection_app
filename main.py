@@ -8,6 +8,7 @@ import os
 import uuid
 import shutil
 import gc
+import sys
 
 app = FastAPI()
 
@@ -79,3 +80,12 @@ async def predict(file: UploadFile = File(...)):
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
+    print("✅ App is starting...")
+
+try:
+    from ultralytics import YOLO
+    model = YOLO("best.pt")
+    print("Model loaded successfully.")
+except Exception as e:
+    print("Failed to load model:", e)
+    sys.exit(1)
