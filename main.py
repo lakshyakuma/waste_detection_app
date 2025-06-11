@@ -6,61 +6,71 @@ from PIL import Image
 import io
 import os
 import uuid
+import shutil
+import gc
 
 app = FastAPI()
 
-# Load the model
+# Load the model once at startup
 model = YOLO("best.pt")
 
-# Mount static directory
+# Mount static folder
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Serve index.html from root directory
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     with open("index.html", "r") as f:
         return HTMLResponse(content=f.read())
 
-# Prediction endpoint
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
-        # Read uploaded image
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
+        # Read and convert image immediately
+        image = Image.open(io.BytesIO(await file.read())).convert("RGB")
 
-        # Save to a unique filename
+        # Ensure directories exist
+        os.makedirs("static/predict", exist_ok=True)
+
+        # Unique filename
         filename = f"{uuid.uuid4()}.jpg"
         input_path = f"static/predict/{filename}"
-        os.makedirs("static/predict", exist_ok=True)
         image.save(input_path)
 
-        # 🔁 Clear old runs
-        import shutil
+        # Free memory from original image
+        del image
+        gc.collect()
+
+        # Remove old YOLO outputs
         if os.path.exists("runs/detect"):
             shutil.rmtree("runs/detect")
 
-        # Run prediction
+        # Predict (YOLO will auto-save to runs/detect/)
         results = model.predict(source=input_path, save=True, save_txt=False, conf=0.05)
+        boxes = results[0].boxes
+        names = model.names
 
-        # Get prediction classes
+        # Extract predictions
         predictions = []
-        for box in results[0].boxes:
+        for box in boxes:
             class_id = int(box.cls[0])
             confidence = float(box.conf[0])
             predictions.append({
-            "class": model.names[class_id],
-            "confidence": round(confidence * 100, 2)
-    })
+                "class": names[class_id],
+                "confidence": round(confidence * 100, 2)
+            })
 
-        # YOLO saves to new dir like runs/detect/predict, predict2, etc.
-        result_dir = results[0].save_dir  # Path object
-        saved_image_path = os.path.join(result_dir, filename)
-        predicted_output_path = f"static/predict/{filename}"
+        # Move image from YOLO output to static/
+        result_dir = results[0].save_dir
+        saved_path = os.path.join(result_dir, filename)
+        output_path = f"static/predict/{filename}"
 
-        # Move result image to static/predict/
-        if os.path.exists(saved_image_path):
-            os.replace(saved_image_path, predicted_output_path)
+        if os.path.exists(saved_path):
+            os.replace(saved_path, output_path)
+
+        # Cleanup memory
+        del results
+        del boxes
+        gc.collect()
 
         return JSONResponse(content={
             "predictions": predictions,
@@ -69,4 +79,3 @@ async def predict(file: UploadFile = File(...)):
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
