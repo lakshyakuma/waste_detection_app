@@ -1,0 +1,25 @@
+
+
+train: dataset/images/train
+val: dataset/images/valid
+
+nc: 18
+names: 
+  - Bottle
+  - Can
+  - Carton
+  - E-Waste
+  - Electric Cable
+  - Glass
+  - Glass Bottle
+  - Metal
+  - Organic Waste
+  - Phone Case
+  - Plastic Bag
+  - Plastics
+  - Spoon
+  - Styrofoam
+  - Trash- Brush
+  - Wooden Waste
+  - Yoga Mat
+  - Paper
